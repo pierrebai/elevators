@@ -6,30 +6,12 @@
     //            for at least one person.
     //
     //            Once all requests have been assigned to elevators for that
-    //            updates, elevators that have not been assigned a rewuest will
-    //            instead go to weird its occupants want. Yes, that means this
+    //            updates, elevators that have not been assigned a request will
+    //            instead go to where its occupants want. Yes, that means this
     //            algorithm favors floor requests over occupants requests.
     //
     // Average wait time: 16.1s
     // Maximum wait time: 75.3s
-    //
-    // The API has many weaknesses that makes this more difficult than it should:
-    //    - We don't know how many people will fit because all we have is
-    //      a load factor and capacity, but people can be skinny and trick
-    //      us in thinking there is space left when there is not.
-    //
-    //    - We don't know the prcise potion of the elevator. All we have is
-    //      the last floor the elevator passed at and a direction of the
-    //      elevator. We fudge it by assuming that an elevator going up is
-    //      slightly above that last seen floor, and one going down is slightly
-    //      below the last floor seen.
-    //
-    //    - There are many vaguely-specified things, like when the idle function
-    //      is called? Is it called only when stopped? Is it called if someone
-    //      immediately hops in a stopped elevator and presses buttons? If a
-    //      floor button is already lit and someone comes, is the button pressed
-    //      again, so that the number of presses equals the number of people?
-
 
     init: function (elevators, floors) {
         elevators.forEach(function(elevator) {
@@ -59,7 +41,6 @@
                 var elDirNum = elevator.my_dirNum();
                 var toFloorDirNum = elevator.my_dirNumToFloor(floorNum);
                 return (elDirNum == 0) || ((elDirNum == my_dirNum) && (elDirNum == toFloorDirNum));
-                return elDirNum == 0 || elDirNum == toFloorDirNum;
             };
     
             elevator.my_currentDestination = function(defaultFloorNum) {
@@ -136,6 +117,8 @@
     },
 
     update: function (dt, elevators, floors) {
+        // Create a map of which floors have waiting people segregated by
+        // the direction. Also finds the maximum floor number.
         var waitings = new Map([["up", new Set()], ["down", new Set()]]);
         var maxFloorNum = 0;
         floors.forEach(function (floor) {
@@ -151,17 +134,23 @@
             }
         });
 
+        // Reset elevator available and indicators.
         elevators.forEach(function (elevator) {
             elevator.my_updateAvailable();
             elevator.my_updateIndicators();
         });
 
+        // Stop and go to the given floor if the elevator is not null.
+        // Algorithms below generate a null elevator when there is nothing
+        // to do.
         var elGoFloor = function(elevator, floorNum) {
             if (elevator != null) {
                 elevator.my_stopAndGo(floorNum);
             }
         };
 
+        // Find the best elevator to satisfy a request from a floor to go
+        // in a particular direction. The heart of the main algorithm.
         var elBestElevatorForFloor = function(floorNum, direction) {
             var best_elevator = null;
             var smallest_dist = 100000.0;
@@ -182,6 +171,8 @@
             return best_elevator;
         };
 
+        // Verify if a direction for a particular floor is already being served
+        // by an elevator.
         var flAlreadyServed = function (floorNum, direction) {
             var served = false;
             elevators.forEach(function (elevator) {
@@ -195,6 +186,8 @@
             return served;
         };
 
+        // Find the best elevator for all waiting requests that are not
+        // already setrved by an elevator.
         waitings.forEach(function (floorNums, direction) {
             floorNums.forEach(function (floorNum) {
                 if (!flAlreadyServed(floorNum, direction)) {
@@ -204,6 +197,8 @@
             });
         });
 
+        // If an elevator has not been directed to go pick-up waiters,
+        // then it can fullfill its occupants destinations.
         elevators.forEach(function (elevator) {
             if (elevator.my_available) {
                 var nearest_floorNum = elevator.my_occupantsNearestFloorNum();
@@ -212,6 +207,11 @@
                 }
             }
         });
+
+        // These were to move idle elevators. Tryuing to spread them all
+        // over the building. This tended to make levels where there are
+        // a maximum numb er of moves allowed worse since the elevators
+        // are not doing useful work when they move on their own.
 
         // var elNearestToFloor = function (floorNum) {
         //     var best_elevator = null;

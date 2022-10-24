@@ -27,24 +27,6 @@
     //
     // Average wait time: 12.2s
     // Maximum wait time: 40.1s
-    //
-    // The API has many weaknesses that makes this more difficult than it should:
-    //    - We don't know how many people will fit because all we have is
-    //      a load factor and capacity, but people can be skinny and trick
-    //      us in thinking there is space left when there is not.
-    //
-    //    - We don't know the prcise potion of the elevator. All we have is
-    //      the last floor the elevator passed at and a direction of the
-    //      elevator. We fudge it by assuming that an elevator going up is
-    //      slightly above that last seen floor, and one going down is slightly
-    //      below the last floor seen.
-    //
-    //    - There are many vaguely-specified things, like when the idle function
-    //      is called? Is it called only when stopped? Is it called if someone
-    //      immediately hops in a stopped elevator and presses buttons? If a
-    //      floor button is already lit and someone comes, is the button pressed
-    //      again, so that the number of presses equals the number of people?
-
 
     init: function(elevators, floors) {
         var floorByNum = new Map();
@@ -91,7 +73,6 @@
                 var elDirNum = elevator.my_dirNum();
                 var toFloorDirNum = elevator.my_dirNumToFloor(floorNum);
                 return (elDirNum == 0) || ((elDirNum == my_dirNum) && (elDirNum == toFloorDirNum));
-                return elDirNum == 0 || elDirNum == toFloorDirNum;
             };
 
             elevator.my_willHaveDirAtFloor = function(floorNum, direction) {
@@ -180,6 +161,8 @@
                 elevator.my_available = (elevator.my_currentDestination(-1) == -1);
             };
 
+            // When an elevator passes by a floor, check if it can pick-up
+            // some people on that floor waiting to go in the same direction.
             elevator.my_checkPassingFloor = function(floorNum, direction) {
                 if (elevator.my_spaceLeft() < 0.8) {
                     return;
@@ -204,6 +187,7 @@
             };
         });
 
+        // When an elevator button is pressed, go to that floor.
         var elGoto = function (elevator, floorNum) {
             if (floorNum < 0)
                 return;
@@ -283,6 +267,8 @@
             elevator.my_updateIndicators();
         };
 
+        // When the elevator stops at a floor, update its indicators and check
+        // if there is work to do if it has no other destinations to go to.
         var elStoppedAtFloor = function (elevator, floorNum) {
             elevator.my_updateIndicators();
 
@@ -293,10 +279,8 @@
             elevator.my_updateIndicators();
         }
 
+        // Connect the API elevator triggers to the corresponding function.
         elevators.forEach(function (elevator) {
-            // elevator.on("idle", function () {
-            //     elOnIdle(elevator);
-            // });
             elevator.on("floor_button_pressed", function (floorNum) {
                 elGoto(elevator, floorNum);
             });
@@ -308,6 +292,7 @@
             });
         });
 
+        // When a floor button is pressed, use any elevator that is idle.
         floors.forEach(function (floor) {
             floorByNum.set(floor.floorNum(), floor);
 
@@ -329,6 +314,8 @@
     },
 
     update: function(dt, elevators, floors) {
+        // Cancel elevators movements toward floor that were cleared by
+        // other elevators that were passing by.
         floors.forEach(function(floor) {
             var floorNum = floor.floorNum();
             if (!floor.buttonStates.up) {
